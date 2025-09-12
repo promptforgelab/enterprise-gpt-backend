@@ -1,0 +1,7 @@
+{
+  "name": "enterprise-gpt-backend",
+  "version": "1.0.0",
+  "dependencies": {
+    "json2csv": "^6.0.0"
+  }
+}
