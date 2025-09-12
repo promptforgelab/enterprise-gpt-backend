@@ -1,5 +1,11 @@
 // api/build-campaign.js
-const { Parser } = require("json2csv");
+
+// tiny CSV escaper (no deps)
+function csvEscape(v) {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
 module.exports = (req, res) => {
   if (req.method !== "POST") {
@@ -10,7 +16,7 @@ module.exports = (req, res) => {
   try {
     const {
       product_name,
-      target_audience,
+      target_audience, // not used in export but accepted
       geo,
       budget,
       tone,
@@ -23,10 +29,14 @@ module.exports = (req, res) => {
 
     const n = Math.max(1, Number(num_variants || 1));
     if (!product_name || !geo || headlines.length === 0 || descriptions.length === 0 || cta_pool.length === 0) {
-      res.status(400).json({ error: "Missing required fields (product_name, geo, headlines[], descriptions[], cta_pool[])" });
+      res.status(400).json({
+        error:
+          "Missing required fields (product_name, geo, headlines[], descriptions[], cta_pool[])"
+      });
       return;
     }
 
+    // build rows
     const rows = [];
     for (let i = 0; i < n; i++) {
       rows.push({
@@ -42,9 +52,32 @@ module.exports = (req, res) => {
       });
     }
 
-    const csv = new Parser().parse(rows);
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=bulk_ads_export.csv");
+    // headers
+    const headers = [
+      "Campaign",
+      "AdGroup",
+      "Headline",
+      "Description",
+      "CTA",
+      "Geo",
+      "Platform",
+      "Budget",
+      "Tone"
+    ];
+
+    // assemble CSV
+    const lines = [];
+    lines.push(headers.join(","));
+    for (const r of rows) {
+      lines.push(headers.map(h => csvEscape(r[h])).join(","));
+    }
+    const csv = lines.join("\r\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="bulk_ads_export.csv"'
+    );
     res.status(200).send(csv);
   } catch (err) {
     console.error(err);
