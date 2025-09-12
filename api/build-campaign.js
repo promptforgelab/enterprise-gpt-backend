@@ -1,8 +1,10 @@
+// api/build-campaign.js
 const { Parser } = require("json2csv");
 
-export default async function handler(req, res) {
+module.exports = (req, res) => {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
 
   try {
@@ -14,38 +16,38 @@ export default async function handler(req, res) {
       tone,
       num_variants,
       platform,
-      headlines,
-      descriptions,
-      cta_pool
-    } = req.body;
+      headlines = [],
+      descriptions = [],
+      cta_pool = []
+    } = req.body || {};
 
-    let data = [];
+    const n = Math.max(1, Number(num_variants || 1));
+    if (!product_name || !geo || headlines.length === 0 || descriptions.length === 0 || cta_pool.length === 0) {
+      res.status(400).json({ error: "Missing required fields (product_name, geo, headlines[], descriptions[], cta_pool[])" });
+      return;
+    }
 
-    for (let i = 0; i < num_variants; i++) {
-      const headline = headlines[i % headlines.length];
-      const description = descriptions[i % descriptions.length];
-      const cta = cta_pool[i % cta_pool.length];
-
-      data.push({
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      rows.push({
         Campaign: `${product_name} - ${geo}`,
-        Headline: headline,
-        Description: description,
-        CTA: cta,
+        AdGroup: `${product_name} - Core`,
+        Headline: headlines[i % headlines.length],
+        Description: descriptions[i % descriptions.length],
+        CTA: cta_pool[i % cta_pool.length],
         Geo: geo,
-        Platform: platform,
-        Budget: budget,
-        Tone: tone
+        Platform: platform || "Google Search",
+        Budget: budget || "",
+        Tone: tone || ""
       });
     }
 
-    const parser = new Parser();
-    const csv = parser.parse(data);
-
+    const csv = new Parser().parse(rows);
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=bulk_ads_export.csv");
-    return res.status(200).send(csv);
-  } catch (error) {
-    console.error("Error generating CSV:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    res.status(200).send(csv);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to generate export" });
   }
-}
+};
