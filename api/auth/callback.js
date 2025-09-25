@@ -22,20 +22,24 @@ module.exports = async (req, res) => {
 
     // 2. Use access_token to list accessible accounts
     const response = await fetch(
-  "https://googleads.googleapis.com/v14/customers:listAccessibleCustomers",
-  {
-    method: "POST", 
-    headers: {
-      "Authorization": `Bearer ${tokens.access_token}`,
-      "developer-token": DEVELOPER_TOKEN,
-      "Content-Type": "application/json"
+      "https://googleads.googleapis.com/v14/customers:listAccessibleCustomers",
+      {
+        method: "GET",   // ✅ must be GET
+        headers: {
+          "Authorization": `Bearer ${tokens.access_token}`,
+          "developer-token": DEVELOPER_TOKEN
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Google API error (${response.status}): ${text}`);
     }
-  }
-);
 
     const accounts = await response.json();
 
-    // 3. Display result (for now, just show tokens + accounts in browser)
+    // 3. Display result
     res.status(200).send(`
       <h2>✅ OAuth Success!</h2>
       <h3>Tokens:</h3>
@@ -46,7 +50,7 @@ module.exports = async (req, res) => {
     `);
 
   } catch (err) {
-    console.error(err);
+    console.error("OAuth Error", err);
     res.status(500).send("OAuth Error: " + err.message);
   }
 };
