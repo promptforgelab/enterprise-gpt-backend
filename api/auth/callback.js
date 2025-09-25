@@ -22,15 +22,16 @@ module.exports = async (req, res) => {
 
     // 2. Use access_token to list accessible accounts
     const response = await fetch(
-      "https://googleads.googleapis.com/v14/customers:listAccessibleCustomers",
-      {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${tokens.access_token}`,
-          "developer-token": DEVELOPER_TOKEN,
-        }
-      }
-    );
+  "https://googleads.googleapis.com/v14/customers:listAccessibleCustomers",
+  {
+    method: "POST", 
+    headers: {
+      "Authorization": `Bearer ${tokens.access_token}`,
+      "developer-token": DEVELOPER_TOKEN,
+      "Content-Type": "application/json"
+    }
+  }
+);
 
     const accounts = await response.json();
 
