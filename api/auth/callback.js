@@ -20,14 +20,15 @@ module.exports = async (req, res) => {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // 2. Use access_token to list accessible accounts
+    // 2. Call Google Ads API: listAccessibleCustomers
     const response = await fetch(
       "https://googleads.googleapis.com/v14/customers:listAccessibleCustomers",
       {
-        method: "GET",   // ✅ must be GET
+        method: "POST",   // ✅ must be POST
         headers: {
           "Authorization": `Bearer ${tokens.access_token}`,
-          "developer-token": DEVELOPER_TOKEN
+          "developer-token": DEVELOPER_TOKEN,
+          "Content-Type": "application/json"
         }
       }
     );
