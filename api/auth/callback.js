@@ -19,19 +19,17 @@ module.exports = async (req, res) => {
     // 1. Exchange code for tokens
     const { tokens } = await oauth2Client.getToken(code);
 
-    // 2. Create Ads API client
+    // 2. Initialize Ads API client
     const client = new GoogleAdsApi({
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       developer_token: DEVELOPER_TOKEN,
     });
 
-    // 3. CustomerService call using refresh_token
-    const customerService = client.CustomerService({
+    // 3. List accessible accounts (using refresh_token)
+    const accounts = await client.listAccessibleCustomers({
       refresh_token: tokens.refresh_token,
     });
-
-    const accounts = await customerService.listAccessibleCustomers();
 
     // 4. Display result
     res.status(200).send(`
@@ -47,4 +45,3 @@ module.exports = async (req, res) => {
     res.status(500).send("OAuth Error: " + err.message);
   }
 };
-
