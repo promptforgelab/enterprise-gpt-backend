@@ -53,7 +53,7 @@ module.exports = async (req, res) => {
 
     // 3. Call Google Ads API
     const response = await fetch(
-      `https://googleads.googleapis.com/v14/customers/${customer_id}/googleAds:search`,
+      `https://googleads.googleapis.com/v14/customers/${customer_id}/googleAds:searchStream`,
       {
         method: "POST",
         headers: {
