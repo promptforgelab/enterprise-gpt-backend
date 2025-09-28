@@ -1,6 +1,6 @@
 // api/auth/callback.js
-const { google } = require('googleapis');
-const fetch = require('node-fetch');
+const { google } = require("googleapis");
+const { GoogleAdsApi } = require("google-ads-api");
 
 const CLIENT_ID = process.env.GADS_CLIENT_ID;
 const CLIENT_SECRET = process.env.GADS_CLIENT_SECRET;
@@ -18,42 +18,33 @@ module.exports = async (req, res) => {
 
     // 1. Exchange code for tokens
     const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
 
-    // 2. Call Google Ads API: listAccessibleCustomers
-   const response = await fetch(
-  "https://googleads.googleapis.com/v14/customers:listAccessibleCustomers",
-  {
-    method: "POST",    // ✅ must be POST, not GET
-    headers: {
-      "Authorization": `Bearer ${tokens.access_token}`,
-      "developer-token": DEVELOPER_TOKEN,
-      "Content-Type": "application/json"
-    },
-    body: "{}"          // ✅ required, even if empty
-  }
-);
+    // 2. Create Ads API client
+    const client = new GoogleAdsApi({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      developer_token: DEVELOPER_TOKEN,
+    });
 
+    // 3. CustomerService call using refresh_token
+    const customerService = client.CustomerService({
+      refresh_token: tokens.refresh_token,
+    });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Google API error (${response.status}): ${text}`);
-    }
+    const accounts = await customerService.listAccessibleCustomers();
 
-    const accounts = await response.json();
-
-    // 3. Display result
+    // 4. Display result
     res.status(200).send(`
       <h2>✅ OAuth Success!</h2>
-      <h3>Tokens:</h3>
-      <pre>${JSON.stringify(tokens, null, 2)}</pre>
+      <h3>Refresh Token (save this):</h3>
+      <pre>${tokens.refresh_token}</pre>
       <h3>Accessible Accounts:</h3>
       <pre>${JSON.stringify(accounts, null, 2)}</pre>
-      <p>Pick a customer ID from above and use it in /api/ads-metrics.</p>
+      <p>Pick a customer ID and use it with /api/ads-metrics.</p>
     `);
-
   } catch (err) {
     console.error("OAuth Error", err);
     res.status(500).send("OAuth Error: " + err.message);
   }
 };
+
