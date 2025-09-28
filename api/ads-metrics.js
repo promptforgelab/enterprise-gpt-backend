@@ -14,14 +14,15 @@ module.exports = async (req, res) => {
         .json({ error: "Missing customer_id or refresh_token" });
     }
 
-    // 1. Init Google Ads client
+    // 1. Init Google Ads API client
     const client = new GoogleAdsApi({
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       developer_token: DEVELOPER_TOKEN,
+      login_customer_id: customer_id, // ✅ required
     });
 
-    // 2. Connect to customer using refresh token
+    // 2. Connect customer
     const customer = client.Customer({
       customer_account_id: customer_id,
       refresh_token,
@@ -41,7 +42,7 @@ module.exports = async (req, res) => {
     `;
 
     // 4. Run search
-    const result = await customer.query(query);
+    const result = await customer.search(query);
 
     return res.status(200).json(result);
   } catch (err) {
