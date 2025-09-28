@@ -12,11 +12,7 @@ async function getAccessTokenFromRefresh(refreshToken) {
   params.append('grant_type', 'refresh_token');
   params.append('refresh_token', refreshToken);
 
-  const r = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    body: params
-  });
-
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: params });
   const data = await r.json();
   if (!data.access_token) throw new Error("Failed to refresh token: " + JSON.stringify(data));
   return data.access_token;
@@ -59,11 +55,7 @@ module.exports = async (req, res) => {
       }
     );
 
-    const data = await response.json();
-
-    res.status(200).json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch metrics", details: err.message });
-  }
-};
+    const text = await response.text(); // read raw text
+    try {
+      const data = JSON.parse(text); // try parsing JSON
+      res.status(200).j
