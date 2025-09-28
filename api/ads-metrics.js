@@ -51,7 +51,7 @@ module.exports = async (req, res) => {
       WHERE segments.date DURING LAST_7_DAYS
     `;
 
-    // 3. Call Google Ads API
+    // 3. Call Google Ads API (must use searchStream in REST mode)
     const response = await fetch(
       `https://googleads.googleapis.com/v14/customers/${customer_id}/googleAds:searchStream`,
       {
@@ -61,7 +61,7 @@ module.exports = async (req, res) => {
           "developer-token": DEVELOPER_TOKEN,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ query, pageSize: 100 }),
+        body: JSON.stringify({ query }),
       }
     );
 
