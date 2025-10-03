@@ -2,6 +2,8 @@
   "name": "enterprise-gpt-backend",
   "version": "1.0.0",
   "dependencies": {
+    "openai": "^4.0.0",
+     "json2csv": "^6.0.0",
     "google-ads-api": "^14.0.0",
     "googleapis": "^131.0.0",
     "node-fetch": "^2.6.7"
