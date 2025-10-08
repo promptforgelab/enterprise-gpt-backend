@@ -1,6 +1,4 @@
 // api/auth/callback.js
-const fetch = require("node-fetch");
-
 module.exports = async (req, res) => {
   try {
     const code = req.query.code;
@@ -14,6 +12,7 @@ module.exports = async (req, res) => {
       grant_type: "authorization_code",
     });
 
+    // ✅ Use native fetch (no need for node-fetch)
     const response = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -26,26 +25,31 @@ module.exports = async (req, res) => {
       console.error("OAuth Error:", data);
       return res.status(400).send(`
         <h2>❌ OAuth Failed</h2>
-        <p>Error: ${data.error}</p>
-        <p>Description: ${data.error_description}</p>
+        <p><strong>Error:</strong> ${data.error}</p>
+        <p><strong>Description:</strong> ${data.error_description || "N/A"}</p>
         <pre>${JSON.stringify(data, null, 2)}</pre>
         <hr />
-        <p>Possible fix: Verify your redirect URI matches exactly:<br>
-        <strong>${process.env.GADS_REDIRECT_URI}</strong></p>
+        <p>✅ <strong>Check this first:</strong><br>
+        Your redirect URI must exactly match:<br>
+        <code>${process.env.GADS_REDIRECT_URI}</code></p>
       `);
     }
 
+    // ✅ Lightweight HTML with minimal payload (safe for both browser & GPT)
+    const refreshToken =
+      data.refresh_token ||
+      "No refresh token received (try adding &prompt=consent to the auth link)";
+
     res.status(200).send(`
       <h2>✅ OAuth Success!</h2>
-      <h3>Refresh Token (save this):</h3>
-      <pre>${data.refresh_token || "No refresh token (try adding &prompt=consent to the auth link)"}</pre>
+      <p><strong>Refresh Token (save this):</strong></p>
+      <pre>${refreshToken}</pre>
       <p>
-        Now go to your Google Ads UI and copy your Customer ID (top right corner, looks like 123-456-7890).<br/>
-        Remove the dashes → e.g. 1234567890.
-      </p>
-      <p>
-        Then call:<br/>
-        /api/ads-metrics?customer_id=YOUR_ID&refresh_token=${data.refresh_token || "YOUR_REFRESH_TOKEN"}
+        Next steps:<br/>
+        1️⃣ Copy your Google Ads Customer ID (e.g., 123-456-7890).<br/>
+        2️⃣ Remove dashes → 1234567890.<br/>
+        3️⃣ Then call:<br/>
+        <code>/api/ads-metrics?customer_id=YOUR_ID&refresh_token=${refreshToken}</code>
       </p>
     `);
   } catch (err) {
