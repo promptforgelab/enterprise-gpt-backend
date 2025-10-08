@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "dependencies": {
     "openai": "^4.0.0",
-     "json2csv": "^6.0.0",
+    "json2csv": "^5.0.7",
+  "node-fetch": "^3.3.2",
     "google-ads-api": "^14.0.0",
-    "googleapis": "^131.0.0",
-    "node-fetch": "^2.6.7"
+    "googleapis": "^131.0.0"
+   
   }
 }
