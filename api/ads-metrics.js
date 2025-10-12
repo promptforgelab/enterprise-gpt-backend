@@ -1,6 +1,7 @@
 // api/ads-metrics.js
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
 const CLIENT_ID = process.env.GADS_CLIENT_ID;
 const CLIENT_SECRET = process.env.GADS_CLIENT_SECRET;
 const DEVELOPER_TOKEN = process.env.GADS_DEVELOPER_TOKEN;
@@ -26,14 +27,12 @@ async function getAccessTokenFromRefresh(refreshToken) {
 module.exports = async (req, res) => {
   try {
     const { customer_id, refresh_token } = req.query;
-    if (!customer_id || !refresh_token)
-      return res
-        .status(400)
-        .json({ error: "Missing customer_id or refresh_token" });
+    if (!customer_id || !refresh_token) {
+      return res.status(400).json({ error: "Missing customer_id or refresh_token" });
+    }
 
     const accessToken = await getAccessTokenFromRefresh(refresh_token);
 
-    // ✅ REST GAQL endpoint instead of gRPC
     const query = `
       SELECT
         campaign.id,
@@ -41,15 +40,19 @@ module.exports = async (req, res) => {
         metrics.impressions,
         metrics.clicks,
         metrics.ctr,
-        metrics.average_cpc
+        metrics.average_cpc,
+        metrics.conversions
       FROM campaign
       WHERE segments.date DURING LAST_7_DAYS
+      ORDER BY metrics.impressions DESC
+      LIMIT 50
     `;
 
     const body = JSON.stringify({ query });
 
+    // ✅ Correct endpoint (streaming search)
     const response = await fetch(
-      `https://googleads.googleapis.com/v14/customers/${customer_id}/googleAds:search`,
+      `https://googleads.googleapis.com/v14/customers/${customer_id}/googleAds:searchStream`,
       {
         method: "POST",
         headers: {
@@ -61,26 +64,30 @@ module.exports = async (req, res) => {
       }
     );
 
-    const text = await response.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      throw new Error("Non-JSON response: " + text.slice(0, 200));
-    }
-
     if (!response.ok) {
-      return res
-        .status(response.status)
-        .json({ error: "Google Ads API error", details: data });
+      const errText = await response.text();
+      return res.status(response.status).json({
+        error: "Google Ads API error",
+        details: errText.slice(0, 500),
+      });
     }
 
-    // ✅ Trim payload so GPT never hits ResponseTooLargeError
-    const limited = (data.results || []).slice(0, 10);
+    // ✅ Parse stream format (line-delimited JSON chunks)
+    const text = await response.text();
+    const lines = text.split("\n").filter(Boolean);
+    const results = lines.flatMap(line => {
+      try {
+        const chunk = JSON.parse(line);
+        return chunk.results || [];
+      } catch {
+        return [];
+      }
+    });
+
+    const limited = results.slice(0, 10);
 
     return res.status(200).json({
       success: true,
-      mode: "basic_access",
       count: limited.length,
       campaigns: limited.map(r => ({
         id: r.campaign?.id,
@@ -89,12 +96,14 @@ module.exports = async (req, res) => {
         clicks: r.metrics?.clicks,
         ctr: r.metrics?.ctr,
         average_cpc: r.metrics?.average_cpc,
+        conversions: r.metrics?.conversions,
       })),
     });
   } catch (err) {
     console.error("Metrics fetch failed:", err);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch metrics", details: err.message });
+    res.status(500).json({
+      error: "Failed to fetch metrics",
+      details: err.message,
+    });
   }
 };
