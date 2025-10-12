@@ -1,6 +1,6 @@
 // api/ads-metrics.js
-const fetch = require("node-fetch");
-
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const CLIENT_ID = process.env.GADS_CLIENT_ID;
 const CLIENT_SECRET = process.env.GADS_CLIENT_SECRET;
 const DEVELOPER_TOKEN = process.env.GADS_DEVELOPER_TOKEN;
