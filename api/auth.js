@@ -13,20 +13,21 @@ module.exports = (req, res) => {
       REDIRECT_URI
     );
 
-    // Generate minimal Google OAuth URL
+    // Generate Google OAuth URL
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: "offline",
       prompt: "consent",
       scope: ["https://www.googleapis.com/auth/adwords"],
     });
 
-    // 🪶 Lightweight response: only the URL, no metadata
-    res.status(200).json({ auth_url: authUrl });
+    // ✅ Redirect instead of returning JSON
+    return res.redirect(authUrl);
   } catch (err) {
     console.error("OAuth start error:", err);
-    // Return minimal error payload to prevent response overflow
     res
       .status(500)
-      .json({ error: "OAuth initiation failed", reason: err.message || "Unknown" });
+      .send(
+        `<h2>Google Ads OAuth Error</h2><p>${err.message || "Unknown error"}</p>`
+      );
   }
 };
