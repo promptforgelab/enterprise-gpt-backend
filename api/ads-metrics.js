@@ -50,16 +50,23 @@ module.exports = async (req, res) => {
 
     const body = JSON.stringify({ query });
 
-    // ✅ Correct endpoint (streaming search)
+    // ✅ Correct endpoint (streaming search) - Updated to v21
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "developer-token": DEVELOPER_TOKEN,
+      "Content-Type": "application/json",
+    };
+
+    // Add MCC header if GADS_MANAGER_ID is set
+    if (process.env.GADS_MANAGER_ID) {
+      headers["login-customer-id"] = process.env.GADS_MANAGER_ID;
+    }
+
     const response = await fetch(
-      `https://googleads.googleapis.com/v14/customers/${customer_id}/googleAds:searchStream`,
+      `https://googleads.googleapis.com/v21/customers/${customer_id}/googleAds:searchStream`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "developer-token": DEVELOPER_TOKEN,
-          "Content-Type": "application/json",
-        },
+        headers,
         body,
       }
     );
