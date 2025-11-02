@@ -33,7 +33,24 @@ module.exports = async (req, res) => {
 
     const accessToken = await getAccessTokenFromRefresh(refresh_token);
 
-    const query = `
+    // ✅ Fix: Query campaigns first WITHOUT metrics to ensure all campaigns are returned
+    // When querying metrics, Google Ads API requires a date segment and excludes campaigns
+    // with no activity in that date range. Paused/unserving campaigns won't appear.
+    const campaignsQuery = `
+      SELECT
+        campaign.id,
+        campaign.name,
+        campaign.status,
+        campaign.serving_status,
+        campaign.advertising_channel_type
+      FROM campaign
+      WHERE campaign.status IN ('ENABLED', 'PAUSED', 'REMOVED')
+      ORDER BY campaign.id
+    `;
+
+    // Separate query for metrics with extended date range (LAST_30_DAYS)
+    // This will return metrics only for campaigns with activity, but we merge with campaign list
+    const metricsQuery = `
       SELECT
         campaign.id,
         campaign.name,
@@ -43,68 +60,96 @@ module.exports = async (req, res) => {
         metrics.average_cpc,
         metrics.conversions
       FROM campaign
-      WHERE segments.date DURING LAST_7_DAYS
-      ORDER BY metrics.impressions DESC
-      LIMIT 50
+      WHERE segments.date DURING LAST_30_DAYS
+        AND campaign.status IN ('ENABLED', 'PAUSED', 'REMOVED')
     `;
 
-    const body = JSON.stringify({ query });
+    // Helper function to execute GAQL query
+    const executeQuery = async (query) => {
+      const body = JSON.stringify({ query });
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": DEVELOPER_TOKEN,
+        "Content-Type": "application/json",
+      };
 
-    // ✅ Correct endpoint (streaming search) - Updated to v21
-    const headers = {
-      Authorization: `Bearer ${accessToken}`,
-      "developer-token": DEVELOPER_TOKEN,
-      "Content-Type": "application/json",
+      // Add MCC header if GADS_MANAGER_ID is set
+      // Note: MCC ID should be provided without dashes (e.g., "1843930354" not "184-393-0354")
+      if (process.env.GADS_MANAGER_ID) {
+        headers["login-customer-id"] = process.env.GADS_MANAGER_ID;
+      }
+
+      const response = await fetch(
+        `https://googleads.googleapis.com/v21/customers/${customer_id}/googleAds:searchStream`,
+        {
+          method: "POST",
+          headers,
+          body,
+        }
+      );
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Google Ads API error: ${errText.slice(0, 500)}`);
+      }
+
+      // Parse stream format (line-delimited JSON chunks)
+      const text = await response.text();
+      const lines = text.split("\n").filter(Boolean);
+      return lines.flatMap(line => {
+        try {
+          const chunk = JSON.parse(line);
+          return chunk.results || [];
+        } catch {
+          return [];
+        }
+      });
     };
 
-    // Add MCC header if GADS_MANAGER_ID is set
-    if (process.env.GADS_MANAGER_ID) {
-      headers["login-customer-id"] = process.env.GADS_MANAGER_ID;
-    }
-
-    const response = await fetch(
-      `https://googleads.googleapis.com/v21/customers/${customer_id}/googleAds:searchStream`,
-      {
-        method: "POST",
-        headers,
-        body,
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({
-        error: "Google Ads API error",
-        details: errText.slice(0, 500),
+    // Step 1: Get all campaigns (without metrics) - this ensures all campaigns are returned
+    const campaigns = await executeQuery(campaignsQuery);
+    
+    // Step 2: Get metrics (with date range) - this may exclude campaigns with no activity
+    let metricsMap = {};
+    try {
+      const metricsResults = await executeQuery(metricsQuery);
+      metricsResults.forEach(r => {
+        if (r.campaign?.id) {
+          metricsMap[r.campaign.id] = {
+            impressions: r.metrics?.impressions || 0,
+            clicks: r.metrics?.clicks || 0,
+            ctr: r.metrics?.ctr || 0,
+            average_cpc: r.metrics?.average_cpc || 0,
+            conversions: r.metrics?.conversions || 0,
+          };
+        }
       });
+    } catch (metricsError) {
+      // If metrics query fails (e.g., account has no activity), just use empty metrics
+      console.warn("Metrics query failed (expected for paused accounts):", metricsError.message);
     }
 
-    // ✅ Parse stream format (line-delimited JSON chunks)
-    const text = await response.text();
-    const lines = text.split("\n").filter(Boolean);
-    const results = lines.flatMap(line => {
-      try {
-        const chunk = JSON.parse(line);
-        return chunk.results || [];
-      } catch {
-        return [];
-      }
-    });
-
-    const limited = results.slice(0, 10);
+    // Merge campaigns with their metrics
+    const campaignsWithMetrics = campaigns.map(r => ({
+      id: r.campaign?.id,
+      name: r.campaign?.name,
+      status: r.campaign?.status || 'UNKNOWN',
+      serving_status: r.campaign?.serving_status || 'UNKNOWN',
+      advertising_channel_type: r.campaign?.advertising_channel_type || 'UNKNOWN',
+      // Merge metrics if available, otherwise use 0
+      ...(metricsMap[r.campaign?.id] || {
+        impressions: 0,
+        clicks: 0,
+        ctr: 0,
+        average_cpc: 0,
+        conversions: 0,
+      }),
+    }));
 
     return res.status(200).json({
       success: true,
-      count: limited.length,
-      campaigns: limited.map(r => ({
-        id: r.campaign?.id,
-        name: r.campaign?.name,
-        impressions: r.metrics?.impressions,
-        clicks: r.metrics?.clicks,
-        ctr: r.metrics?.ctr,
-        average_cpc: r.metrics?.average_cpc,
-        conversions: r.metrics?.conversions,
-      })),
+      count: campaignsWithMetrics.length,
+      campaigns: campaignsWithMetrics.slice(0, 50),
     });
   } catch (err) {
     console.error("Metrics fetch failed:", err);
