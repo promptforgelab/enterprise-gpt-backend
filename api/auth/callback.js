@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
       "No refresh token received (try adding &prompt=consent to the auth link)";
 
     res.status(200).send(`
-      <h2>✅ OAuth Success!</h2>
+      <h2>✅ OAuth Success! -> Copy-paste this whole page into ChatGPT </h2>
       <p><strong>Refresh Token (save this):</strong></p>
       <pre>${refreshToken}</pre>
       <p>
