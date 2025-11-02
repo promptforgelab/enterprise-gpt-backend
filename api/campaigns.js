@@ -46,7 +46,7 @@ module.exports = async (req, res) => {
     `;
 
     // Execute query
-    const results = await executeGAQLQuery(normalizedCustomerId, accessToken, query, mccId);
+    const results = await executeGAQLQuery(normalizedCustomerId, accessToken, query, mccId, refresh_token);
 
     // Map results to response format
     const campaigns = results.map(r => ({
