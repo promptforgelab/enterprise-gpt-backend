@@ -58,7 +58,7 @@ module.exports = async (req, res) => {
     `;
 
     // Execute query (query the MCC account itself)
-    const results = await executeGAQLQuery(normalizedMccId, accessToken, query, normalizedMccId);
+    const results = await executeGAQLQuery(normalizedMccId, accessToken, query, normalizedMccId, refresh_token);
 
     // Map results to response format
     const accounts = results.map(r => ({
