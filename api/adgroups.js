@@ -49,7 +49,6 @@ module.exports = async (req, res) => {
   metrics.ctr,
   metrics.cost_micros
 FROM ad_group_ad
-ORDER BY campaign.id, ad_group.id, ad_group_ad.ad.id
     `;
 
     if (campaign_id) {
