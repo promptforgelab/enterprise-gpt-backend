@@ -34,6 +34,7 @@ module.exports = async (req, res) => {
     // Build ad_group_ad GAQL (for Search/DSA/YouTube standard)
     let adGroupAdQuery = `
       SELECT
+        campaign.id
         ad_group.id,
         ad_group.name,
         ad_group.status,
