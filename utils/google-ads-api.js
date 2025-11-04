@@ -128,7 +128,7 @@ async function executeGAQLQuery(customerId, accessToken, query, loginCustomerId 
   }
 
   const response = await fetch(
-    `https://googleads.googleapis.com/v21/customers/${customerId}/googleAds:searchStream`,
+    `https://googleads.googleapis.com/v22/customers/${customerId}/googleAds:searchStream`,
     {
       method: "POST",
       headers,
@@ -148,7 +148,7 @@ async function executeGAQLQuery(customerId, accessToken, query, loginCustomerId 
     headers.Authorization = `Bearer ${newAccessToken}`;
     
     const retryResponse = await fetch(
-      `https://googleads.googleapis.com/v21/customers/${customerId}/googleAds:searchStream`,
+      `https://googleads.googleapis.com/v22/customers/${customerId}/googleAds:searchStream`,
       {
         method: "POST",
         headers,
