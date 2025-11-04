@@ -57,6 +57,9 @@ FROM ad_group_ad
     } else {
       adGroupAdQuery += ` ORDER BY campaign.id, ad_group.id, ad_group_ad.ad.id`;
     }
+    adGroupAdQuery += ` LIMIT 10000`;
+
+    console.log('[DEBUG] GAQL(ad_group_ad):', adGroupAdQuery);
 
     // Execute primary query (ad_group_ad)
     let results = await executeGAQLQuery(normalizedCustomerId, accessToken, adGroupAdQuery, mccId, refresh_token);
@@ -83,6 +86,9 @@ FROM ad_group_ad
       } else {
         assetGroupQuery += ` ORDER BY campaign.id, asset_group.id`;
       }
+      assetGroupQuery += ` LIMIT 10000`;
+
+      console.log('[DEBUG] GAQL(asset_group):', assetGroupQuery);
 
       let assetGroups = await executeGAQLQuery(normalizedCustomerId, accessToken, assetGroupQuery, mccId, refresh_token);
       console.log(`[DEBUG] /api/adgroups - using asset_group query, group count: ${assetGroups.length}`);
@@ -107,6 +113,9 @@ FROM ad_group_ad
         } else {
           assetGroupAssetsQuery += ` ORDER BY asset_group.id`;
         }
+        assetGroupAssetsQuery += ` LIMIT 10000`;
+
+        console.log('[DEBUG] GAQL(asset_group_asset):', assetGroupAssetsQuery);
 
         let assetItems = [];
         try {
@@ -163,10 +172,45 @@ FROM ad_group_ad
           // no metrics here; will be filled with zeros below
         }));
       }
+
+      // If still zero after asset_group flow, try plain ad_group list as final fallback
+      if (!usedAssetGroupFlow) {
+        console.log('[DEBUG] /api/adgroups - asset_group returned 0. Trying plain ad_group list.');
+        let groupsOnlyQuery = `
+          SELECT
+            ad_group.id,
+            ad_group.name,
+            ad_group.status,
+            ad_group.type
+          FROM ad_group
+        `;
+        if (campaign_id) {
+          const normalizedCampaignId = campaign_id.replace(/-/g, '');
+          groupsOnlyQuery += ` WHERE campaign.id = ${normalizedCampaignId}`;
+        } else {
+          groupsOnlyQuery += ` ORDER BY ad_group.id`;
+        }
+        groupsOnlyQuery += ` LIMIT 10000`;
+        console.log('[DEBUG] GAQL(ad_group fallback):', groupsOnlyQuery);
+
+        try {
+          const groupResults = await executeGAQLQuery(normalizedCustomerId, accessToken, groupsOnlyQuery, mccId, refresh_token);
+          results = groupResults.map(r => ({ ad_group: r.ad_group }));
+          console.log(`[DEBUG] /api/adgroups - fallback ad_group results count: ${results.length}`);
+        } catch (fallbackErr) {
+          console.warn('[DEBUG] /api/adgroups - fallback ad_group query failed:', fallbackErr.message);
+        }
+      }
     }
 
     // Group results by ad group
     const adGroupsMap = new Map();
+
+    if (results.length > 0) {
+      const first = results[0] || {};
+      console.log('[DEBUG] /api/adgroups - sample keys:', Object.keys(first));
+      console.log('[DEBUG] /api/adgroups - has ad_group?', !!first.ad_group, 'has ad_group_ad?', !!first.ad_group_ad);
+    }
 
     results.forEach(r => {
       const adGroupId = r.ad_group?.id?.toString();
