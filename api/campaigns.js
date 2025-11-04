@@ -25,6 +25,11 @@ module.exports = async (req, res) => {
     const normalizedCustomerId = normalizeCustomerId(customer_id);
     const mccId = login_customer_id ? normalizeCustomerId(login_customer_id) : null;
 
+    // Root Cause 3: Log MCC header usage
+    console.log(`[DEBUG] /api/campaigns - customer_id: ${normalizedCustomerId}`);
+    console.log(`[DEBUG] /api/campaigns - login_customer_id provided: ${login_customer_id || 'none'}`);
+    console.log(`[DEBUG] /api/campaigns - mccId resolved: ${mccId || 'none (will use env var if set)'}`);
+
     // Get access token
     const accessToken = await getAccessTokenFromRefresh(refresh_token);
 
@@ -45,41 +50,21 @@ module.exports = async (req, res) => {
       ORDER BY campaign.id
     `;
 
-   // Execute query
-const rawResults = await executeGAQLQuery(normalizedCustomerId, accessToken, query, mccId, refresh_token);
+    // Execute query
+    const results = await executeGAQLQuery(normalizedCustomerId, accessToken, query, mccId, refresh_token);
 
-// Flatten Google Ads API searchStream results
-const flattened = [];
-for (const chunk of rawResults) {
-  if (Array.isArray(chunk.results)) {
-    for (const row of chunk.results) {
-      if (row.campaign) flattened.push(row.campaign);
-    }
-  } else if (chunk.campaign) {
-    // Some utilities may already flatten; handle both shapes
-    flattened.push(chunk.campaign);
-  }
-}
-
-// Map to response format
-const campaigns = flattened.map(c => ({
-  id: c.id?.toString() || null,
-  name: c.name || 'Unnamed Campaign',
-  status: c.status || 'UNKNOWN',
-  serving_status: c.serving_status || 'UNKNOWN',
-  advertising_channel_type: c.advertising_channel_type || 'UNKNOWN',
-  advertising_channel_sub_type: c.advertising_channel_sub_type || null,
-  start_date: c.start_date || null,
-  end_date: c.end_date || null,
-  bidding_strategy_type: c.bidding_strategy_type || null,
-}));
-
-return res.status(200).json({
-  success: true,
-  count: campaigns.length,
-  campaigns,
-});
-
+    // Map results to response format
+    const campaigns = results.map(r => ({
+      id: r.campaign?.id?.toString() || null,
+      name: r.campaign?.name || 'Unnamed Campaign',
+      status: r.campaign?.status || 'UNKNOWN',
+      serving_status: r.campaign?.serving_status || 'UNKNOWN',
+      advertising_channel_type: r.campaign?.advertising_channel_type || 'UNKNOWN',
+      advertising_channel_sub_type: r.campaign?.advertising_channel_sub_type || null,
+      start_date: r.campaign?.start_date || null,
+      end_date: r.campaign?.end_date || null,
+      bidding_strategy_type: r.campaign?.bidding_strategy_type || null,
+    }));
 
     return res.status(200).json({
       success: true,
