@@ -34,18 +34,26 @@ module.exports = async (req, res) => {
     // Build ad_group_ad GAQL (for Search/DSA/YouTube standard)
     let adGroupAdQuery = `
     SELECT
+  campaign.id,
+  campaign.name,
   ad_group.id,
   ad_group.name,
   ad_group.status,
+  ad_group.type,
   ad_group_ad.ad.id,
   ad_group_ad.ad.name,
   ad_group_ad.ad.type,
   ad_group_ad.status,
+  ad_group_ad.ad.responsive_search_ad.headlines,
+  ad_group_ad.ad.responsive_search_ad.descriptions,
+  ad_group_ad.ad.responsive_search_ad.path1,
+  ad_group_ad.ad.responsive_search_ad.path2,
   metrics.impressions,
   metrics.clicks,
   metrics.ctr,
   metrics.cost_micros
 FROM ad_group_ad
+ORDER BY campaign.id, ad_group.id, ad_group_ad.ad.id
     `;
 
     if (campaign_id) {
