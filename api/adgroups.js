@@ -30,8 +30,7 @@ module.exports = async (req, res) => {
 
     // Build GAQL query with optional campaign filter
    let query = `
-  SELECT asset_group.id, asset_group.name, asset_group.status, metrics.impressions, metrics.clicks, metrics.ctr, metrics.cost_micros
-FROM asset_group
+  SELECT ad_group.id, ad_group.name FROM ad_group
 `;
 
     // Add campaign filter if provided
