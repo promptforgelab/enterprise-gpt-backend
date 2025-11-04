@@ -86,13 +86,19 @@ function parseSearchStreamChunk(chunk) {
   if (chunk.results && Array.isArray(chunk.results)) {
     return chunk.results;
   }
-  
-  // Handle direct result object: {"campaign": {...}, "metrics": {...}}
-  // Check for common Google Ads API resource types
+
+  // Normalize common resource keys to support both snake_case and camelCase
+  if (chunk && typeof chunk === 'object') {
+    if (!chunk.ad_group && chunk.adGroup) chunk.ad_group = chunk.adGroup;
+    if (!chunk.ad_group_ad && chunk.adGroupAd) chunk.ad_group_ad = chunk.adGroupAd;
+    if (!chunk.customer_client && chunk.customerClient) chunk.customer_client = chunk.customerClient;
+  }
+
+  // Handle direct result object
   if (chunk.campaign || chunk.ad_group || chunk.ad_group_ad || chunk.customer_client || chunk.metrics) {
     return [chunk];
   }
-  
+
   // If chunk has no recognized structure, log warning and return empty
   console.warn('[DEBUG] Unexpected chunk format. Keys:', Object.keys(chunk));
   return [];
