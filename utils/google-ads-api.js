@@ -134,9 +134,10 @@ async function executeGAQLQuery(customerId, accessToken, query, loginCustomerId 
     console.warn('[WARNING] No MCC header - loginCustomerId and MANAGER_ID both missing');
   }
 
-  // First try searchStream endpoint
-  const searchStreamUrl = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${normalizedCustomerId}/googleAds:searchStream`;
-  console.log(`[DEBUG] Making request to: ${searchStreamUrl}`);
+  // Use /search endpoint explicitly (temporary MCC reliability fix)
+  const effectiveUrl = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${normalizedCustomerId}/googleAds:search`;
+  console.log('[DEBUG] Using explicit /search endpoint (temporary MCC fix)');
+  console.log(`[DEBUG] Making request to: ${effectiveUrl}`);
   
   const requestOptions = {
     method: 'POST',
@@ -151,19 +152,20 @@ async function executeGAQLQuery(customerId, accessToken, query, loginCustomerId 
     'developer-token': headers['developer-token'] ? '[REDACTED]' : 'MISSING',
   }, null, 2));
 
-  let response = await fetch(searchStreamUrl, requestOptions);
+  // Verify presence of login-customer-id header
+  if (!headers['login-customer-id']) {
+    console.error('[ERROR] login-customer-id header missing before request.');
+  } else {
+    console.log('[DEBUG] login-customer-id header verified:', headers['login-customer-id']);
+  }
+
+  let response = await fetch(effectiveUrl, requestOptions);
   let shouldTrySearchFallback = false;
-  
-  // If searchStream returns empty but 200, try fallback to search
+  // Read once for normal path
   if (response.status === 200) {
     const text = await response.text();
-    if (!text || text.trim().length === 0) {
-      console.log('[DEBUG] Empty response from searchStream, triggering /search fallback');
-      shouldTrySearchFallback = true;
-    } else {
-      // Cache parsed text for normal path to avoid double-reading the stream
-      response.parsedText = text;
-    }
+    // Cache parsed text for normal path to avoid double-reading the stream
+    response.parsedText = text;
   }
 
   // Handle 401 Unauthorized - token expired, clear cache and retry once
@@ -181,24 +183,11 @@ async function executeGAQLQuery(customerId, accessToken, query, loginCustomerId 
       console.log('🔄 Attempting fallback to /search endpoint');
     }
     
-    // Try searchStream first (or again if we're retrying after 401)
-    let retryResponse;
-    let isSearchFallback = shouldTrySearchFallback;
-    
-    if (!shouldTrySearchFallback) {
-      // First attempt with searchStream
-      retryResponse = await fetch(
-        `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${normalizedCustomerId}/googleAds:searchStream`,
-        { method: 'POST', headers, body }
-      );
-    } else {
-      // Fallback to search endpoint
-      isSearchFallback = true;
-      retryResponse = await fetch(
-        `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${normalizedCustomerId}/googleAds:search`,
-        { method: 'POST', headers, body }
-      );
-    }
+    // Retry using /search endpoint as well
+    let retryResponse = await fetch(
+      `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${normalizedCustomerId}/googleAds:search`,
+      { method: 'POST', headers, body }
+    );
 
     if (!retryResponse.ok) {
       const errText = await retryResponse.text();
@@ -208,56 +197,25 @@ async function executeGAQLQuery(customerId, accessToken, query, loginCustomerId 
       } catch {
         errorDetails = errText;
       }
-      throw new Error(`Google Ads API error (${retryResponse.status}) after ${isSearchFallback ? 'search fallback' : 'token refresh'}: ${JSON.stringify(errorDetails)}`);
+      throw new Error(`Google Ads API error (${retryResponse.status}) after token refresh: ${JSON.stringify(errorDetails)}`);
     }
 
-    // Handle response based on endpoint type
+    // Handle /search response (single JSON object with results array)
     let results = [];
     const responseText = await retryResponse.text();
-    
-    if (isSearchFallback) {
-      // Handle search endpoint response (single JSON object with results array)
-      try {
-        const responseData = JSON.parse(responseText);
-        console.log(`[DEBUG] Search fallback response keys:`, Object.keys(responseData));
-        
-        // Handle different possible response structures
-        if (Array.isArray(responseData)) {
-          results = responseData.flatMap(parseSearchStreamChunk);
-        } else if (responseData.results && Array.isArray(responseData.results)) {
-          results = responseData.results.flatMap(parseSearchStreamChunk);
-        } else {
-          results = parseSearchStreamChunk(responseData);
-        }
-      } catch (error) {
-        console.error('[ERROR] Failed to parse search fallback response:', error);
-        throw new Error(`Failed to parse search fallback response: ${error.message}`);
+    try {
+      const responseData = JSON.parse(responseText);
+      console.log(`[DEBUG] Retry /search response keys:`, Object.keys(responseData));
+      if (Array.isArray(responseData)) {
+        results = responseData.flatMap(parseSearchStreamChunk);
+      } else if (responseData.results && Array.isArray(responseData.results)) {
+        results = responseData.results.flatMap(parseSearchStreamChunk);
+      } else {
+        results = parseSearchStreamChunk(responseData);
       }
-    } else {
-      // Handle searchStream response (line-delimited JSON)
-      const lines = responseText.split("\n").filter(Boolean);
-      console.log(`[DEBUG] searchStream response: ${lines.length} lines`);
-      
-      if (lines.length > 0) {
-        console.log(`[DEBUG] First 200 chars of first line: ${lines[0].substring(0, 200)}`);
-      }
-      
-      results = lines.flatMap((line, index) => {
-        try {
-          const chunk = JSON.parse(line);
-          const parsed = parseSearchStreamChunk(chunk);
-          
-          if (parsed.length === 0 && index === 0) {
-            console.log(`[DEBUG] First chunk structure:`, JSON.stringify(chunk, null, 2).substring(0, 500));
-          }
-          
-          return parsed;
-        } catch (parseError) {
-          console.error(`[ERROR] Failed to parse line ${index + 1}:`, parseError.message);
-          console.error(`[ERROR] Problematic line (first 200 chars):`, line.substring(0, 200));
-          return [];
-        }
-      });
+    } catch (error) {
+      console.error('[ERROR] Failed to parse retry /search response:', error);
+      throw new Error(`Failed to parse retry /search response: ${error.message}`);
     }
     console.log(`[DEBUG] Total results parsed from retry response: ${results.length}`);
     return results;
@@ -275,37 +233,27 @@ async function executeGAQLQuery(customerId, accessToken, query, loginCustomerId 
     throw new Error(`Google Ads API error (${response.status}): ${JSON.stringify(errorDetails)}`);
   }
 
-  // Parse stream format (line-delimited JSON chunks)
+  // Parse /search JSON response
   const text = response.parsedText ?? await response.text();
-  
-  // Root Cause 4: Response structure validation
   console.log(`[DEBUG] Response status: ${response.status}`);
   console.log(`[DEBUG] Response text length: ${text.length}`);
-  
-  const lines = text.split("\n").filter(Boolean);
-  console.log(`[DEBUG] Number of lines in response: ${lines.length}`);
-  
-  if (lines.length > 0) {
-    console.log(`[DEBUG] Sample first line (first 300 chars): ${lines[0].substring(0, 300)}`);
-  } else {
-    console.warn(`[WARNING] Response has no lines after splitting by newline`);
-    console.warn(`[WARNING] Raw response (first 500 chars):`, text.substring(0, 500));
-  }
-  
-  const results = lines.flatMap((line, index) => {
-    try {
-      const chunk = JSON.parse(line);
-      const parsed = parseSearchStreamChunk(chunk);
-      if (parsed.length === 0 && index === 0) {
-        console.log(`[DEBUG] First chunk structure:`, JSON.stringify(chunk).substring(0, 500));
-      }
-      return parsed;
-    } catch (parseError) {
-      console.error(`[ERROR] Failed to parse line ${index + 1}:`, parseError.message);
-      console.error(`[ERROR] Problematic line (first 200 chars):`, line.substring(0, 200));
-      return [];
+
+  let results = [];
+  try {
+    const data = JSON.parse(text);
+    console.log('[DEBUG] /search response top-level keys:', Array.isArray(data) ? ['<array>'] : Object.keys(data));
+    if (Array.isArray(data)) {
+      results = data.flatMap(parseSearchStreamChunk);
+    } else if (data.results && Array.isArray(data.results)) {
+      results = data.results.flatMap(parseSearchStreamChunk);
+    } else {
+      results = parseSearchStreamChunk(data);
     }
-  });
+  } catch (e) {
+    console.error('[ERROR] Failed to parse /search response JSON:', e.message);
+    console.error('[ERROR] Raw body (first 500 chars):', text.substring(0, 500));
+    throw new Error(`Failed to parse /search response JSON: ${e.message}`);
+  }
 
   console.log(`[DEBUG] Total results parsed: ${results.length}`);
   return results; // ✅ final return
@@ -329,4 +277,3 @@ module.exports = {
   executeGAQLQuery,
   normalizeCustomerId,
 };
-// https://googleads.googleapis.com/v22/customers/${customerId}/googleAds:searchStream
