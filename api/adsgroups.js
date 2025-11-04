@@ -29,26 +29,28 @@ module.exports = async (req, res) => {
     const accessToken = await getAccessTokenFromRefresh(refresh_token);
 
     // Build GAQL query with optional campaign filter
-    let query = `
-      SELECT
-        ad_group.id,
-        ad_group.name,
-        ad_group.status,
-        ad_group.type,
-        ad_group_ad.ad.id,
-        ad_group_ad.ad.name,
-        ad_group_ad.ad.type,
-        ad_group_ad.status,
-        ad_group_ad.ad.responsive_search_ad.headlines,
-        ad_group_ad.ad.responsive_search_ad.descriptions,
-        ad_group_ad.ad.responsive_search_ad.path1,
-        ad_group_ad.ad.responsive_search_ad.path2,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.ctr,
-        metrics.cost_micros
-      FROM ad_group_ad
-    `;
+   let query = `
+  SELECT
+    campaign.id,
+    campaign.name,
+    ad_group.id,
+    ad_group.name,
+    ad_group.status,
+    ad_group.type,
+    ad_group_ad.ad.id,
+    ad_group_ad.ad.name,
+    ad_group_ad.ad.type,
+    ad_group_ad.status,
+    ad_group_ad.ad.responsive_search_ad.headlines,
+    ad_group_ad.ad.responsive_search_ad.descriptions,
+    ad_group_ad.ad.responsive_search_ad.path1,
+    ad_group_ad.ad.responsive_search_ad.path2,
+    metrics.impressions,
+    metrics.clicks,
+    metrics.ctr,
+    metrics.cost_micros
+  FROM ad_group_ad
+`;
 
     // Add campaign filter if provided
     if (campaign_id) {
